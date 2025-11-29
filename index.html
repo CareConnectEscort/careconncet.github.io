@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CareConnect HK - Medical Escort Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- EmailJS SDK -->
+    <script  src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -1023,6 +1025,14 @@
         let actionHistory = []; // Track actions for undo functionality
         let originalUserType = null; // Store original user type for role switching
 
+        // Admin email for notifications
+        const ADMIN_EMAIL = 'amy223372@gmail.com';
+
+        // EmailJS Configuration - CONFIGURED FOR amy223372@gmail.com
+        const EMAILJS_SERVICE_ID = 'service_bbrwuzd';
+        const EMAILJS_TEMPLATE_ID = 'template_gdfo6ps';
+        const EMAILJS_PUBLIC_KEY = 'IBX91Cbie1JlXAWjS';
+
         // Sample data
         const sampleEscorts = [
             {
@@ -1305,9 +1315,12 @@
                 user: {...currentUser}
             });
 
+            // Send registration email notification
+            sendEmailNotification('registration', currentUser);
+
             updateAuthUI();
             showDashboard();
-            showSuccessMessage(`Welcome to CareConnect, ${userData.firstName}! Your account has been created successfully.`);
+            showSuccessMessage(`Welcome to CareConnect, ${userData.firstName}! Your account has been created successfully. Confirmation sent to ${ADMIN_EMAIL}`);
         }
 
         function handleLogin(event) {
@@ -1323,9 +1336,16 @@
                 id: Date.now()
             };
 
+            // Send login email notification
+            sendEmailNotification('login', {
+                email: email,
+                timestamp: new Date().toISOString(),
+                userType: currentUser.userType
+            });
+
             updateAuthUI();
             showDashboard();
-            showSuccessMessage(`Welcome back, ${currentUser.firstName}!`);
+            showSuccessMessage(`Welcome back, ${currentUser.firstName}! Login notification sent to ${ADMIN_EMAIL}`);
         }
 
         function logout() {
@@ -1525,6 +1545,13 @@
             const bookingData = Object.fromEntries(formData.entries());
             const escort = availableEscorts.find(e => e.id === escortId);
 
+            const fullBookingData = {
+                patient: currentUser,
+                escort: escort,
+                bookingDetails: bookingData,
+                timestamp: new Date().toISOString()
+            };
+
             // Track this action for undo
             addToHistory('booking', {
                 action: 'Booked escort',
@@ -1533,8 +1560,11 @@
                 bookingData: {...bookingData}
             });
 
+            // Send booking email notification
+            sendEmailNotification('booking', fullBookingData);
+
             closeBookingModal();
-            showSuccessMessage(`Booking confirmed with ${escort.name}! You'll receive a confirmation email shortly.`);
+            showSuccessMessage(`Booking confirmed with ${escort.name}! Confirmation sent to ${ADMIN_EMAIL} and you'll receive an email shortly.`);
             updateAuthUI(); // Update undo button
         }
 
@@ -1687,8 +1717,11 @@
                 emergencyData: {...emergencyData}
             });
 
+            // Send emergency email notification
+            sendEmailNotification('emergency_booking', emergencyData);
+
             closeBookingModal();
-            showSuccessMessage('Emergency request submitted! A qualified escort will contact you within 15 minutes. Please keep your phone available.');
+            showSuccessMessage('Emergency request submitted! Notification sent to ' + ADMIN_EMAIL + '. A qualified escort will contact you within 15 minutes. Please keep your phone available.');
             updateAuthUI(); // Update undo button
         }
 
@@ -2064,6 +2097,216 @@
                 from: 'auth'
             });
             updateAuthUI();
+        }
+
+        // Initialize EmailJS
+        (function() {
+            if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
+                emailjs.init(EMAILJS_PUBLIC_KEY);
+                console.log('✅ EmailJS initialized');
+            }
+        })();
+
+        // Email Notification System - REAL EMAIL VIA EMAILJS
+        async function sendEmailNotification(type, data) {
+            let subject = '';
+            let body = '';
+            const timestamp = new Date().toLocaleString();
+
+            switch(type) {
+                case 'registration':
+                    subject = `🆕 New User Registration - ${data.userType.toUpperCase()}`;
+                    body = `
+=== NEW USER REGISTRATION ===
+Time: ${timestamp}
+User Type: ${data.userType}
+
+PERSONAL INFORMATION:
+- Name: ${data.firstName} ${data.lastName}
+- Email: ${data.email}
+- Phone: ${data.phone}
+- District: ${data.district}
+
+${data.userType === 'patient' ? `
+PATIENT DETAILS:
+- Age: ${data.age || 'Not provided'}
+- Category: ${data.patientCategory || 'Not specified'}
+- Expected Experience: ${data.expectedExperience || 'Any'}
+- Emergency Contact: ${data.emergencyContact || 'Not provided'}
+- Medical Conditions: ${data.medicalConditions || 'None specified'}
+- Financial Assistance: ${data.needsFinancialAssistance ? 'Yes' : 'No'}
+` : `
+ESCORT DETAILS:
+- Experience Level: ${data.experience || 'Not specified'}
+- Emergency Contact: ${data.emergencyContact || 'Not provided'}
+- Hourly Rate: $${data.hourlyRate || '0'}/hour
+- Volunteer Work: ${data.volunteerWork ? 'Yes' : 'No'}
+`}
+
+User ID: ${data.id}
+Join Date: ${data.joinDate}
+=================================
+                    `;
+                    break;
+
+                case 'login':
+                    subject = `🔐 User Login Notification`;
+                    body = `
+=== USER LOGIN ===
+Time: ${timestamp}
+Email: ${data.email}
+User Type: ${data.userType}
+=================
+                    `;
+                    break;
+
+                case 'booking':
+                    subject = `📅 New Booking Request`;
+                    body = `
+=== NEW BOOKING ===
+Time: ${timestamp}
+
+PATIENT INFORMATION:
+- Name: ${data.patient.firstName} ${data.patient.lastName}
+- Email: ${data.patient.email}
+- Phone: ${data.patient.phone}
+- District: ${data.patient.district}
+
+ESCORT INFORMATION:
+- Name: ${data.escort.name}
+- Specialty: ${data.escort.specialty}
+- Rating: ${data.escort.rating}⭐
+- District: ${data.escort.district}
+- Rate: $${data.escort.hourlyRate}/hour
+
+BOOKING DETAILS:
+- Date: ${data.bookingDetails.date}
+- Time: ${data.bookingDetails.time}
+- Location: ${data.bookingDetails.location}
+- Service Type: ${data.bookingDetails.serviceType}
+- Notes: ${data.bookingDetails.notes || 'None'}
+
+Booking ID: ${Date.now()}
+===================
+                    `;
+                    break;
+
+                case 'emergency_booking':
+                    subject = `🚨 EMERGENCY BOOKING REQUEST`;
+                    body = `
+=== EMERGENCY BOOKING ===
+Time: ${timestamp}
+PRIORITY: HIGH
+
+PATIENT: ${currentUser.firstName} ${currentUser.lastName}
+Email: ${currentUser.email}
+Phone: ${currentUser.phone}
+
+EMERGENCY DETAILS:
+- Current Location: ${data.location}
+- Destination: ${data.destination}
+- Urgency: ${data.urgency}
+- Contact: ${data.phone}
+- Details: ${data.details}
+
+⚠️ IMMEDIATE ACTION REQUIRED
+========================
+                    `;
+                    break;
+            }
+
+            // Display the email content in console (for development)
+            console.log(`
+📧 EMAIL NOTIFICATION
+To: ${ADMIN_EMAIL}
+Subject: ${subject}
+${body}
+            `);
+
+            // Check if EmailJS is configured
+            if (typeof emailjs === 'undefined' || EMAILJS_SERVICE_ID === 'YOUR_SERVICE_ID') {
+                console.warn('⚠️ EmailJS not configured. Showing simulation.');
+                showEmailModal(subject, body, false);
+                return;
+            }
+
+            // Send REAL email via EmailJS
+            try {
+                const templateParams = {
+                    to_email: ADMIN_EMAIL,
+                    subject: subject,
+                    message: body,
+                    from_name: data.firstName ? `${data.firstName} ${data.lastName}` : 'CareConnect System',
+                    from_email: data.email || 'system@careconnect.hk',
+                    notification_type: type,
+                    timestamp: timestamp
+                };
+
+                const response = await emailjs.send(
+                    EMAILJS_SERVICE_ID,
+                    EMAILJS_TEMPLATE_ID,
+                    templateParams
+                );
+
+                console.log('✅ Email sent successfully via EmailJS!', response);
+                showEmailModal(subject, body, true); // Show success
+            } catch (error) {
+                console.error('❌ Error sending email:', error);
+                showEmailModal(subject, body, false); // Show with warning
+            }
+        }
+
+        // Show Email Modal
+        function showEmailModal(subject, body, success = true) {
+            const modal = document.createElement('div');
+            modal.id = 'email-modal';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+
+            const statusIcon = success ? '✅' : '⚠️';
+            const statusText = success
+                ? `Real email sent successfully to ${ADMIN_EMAIL}!`
+                : `Email simulation (Setup Formspree to send real emails to ${ADMIN_EMAIL})`;
+            const statusColor = success ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400';
+
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full p-6 max-h-96 overflow-y-auto">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">📧 Email Notification</h3>
+                        <button onclick="closeEmailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                        <p class="font-semibold mb-2">To: ${ADMIN_EMAIL}</p>
+                        <p class="font-semibold mb-2">Subject: ${subject}</p>
+                        <pre class="text-sm whitespace-pre-wrap font-mono mt-3 border-t border-gray-300 dark:border-gray-600 pt-3">${body}</pre>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <p class="text-sm ${statusColor} mb-3 font-medium">
+                            ${statusIcon} ${statusText}
+                        </p>
+                        ${!success ? `
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                            To enable real emails: Sign up at <a href="https://emailjs.com" target="_blank" class="text-primary underline">emailjs.com</a> and update EmailJS config in the code.
+                        </p>
+                        ` : ''}
+                        <button onclick="closeEmailModal()" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-purple-600 transition-colors">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Auto-close after 10 seconds
+            setTimeout(() => {
+                closeEmailModal();
+            }, 10000);
+        }
+
+        function closeEmailModal() {
+            const modal = document.getElementById('email-modal');
+            if (modal) {
+                modal.remove();
+            }
         }
 
         // Allow Enter key to send message
